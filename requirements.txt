@@ -1,0 +1,5 @@
+django-environ
+django
+pgvector
+langchain
+huggingface_hub
