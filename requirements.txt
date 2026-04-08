@@ -1,5 +1,17 @@
 django-environ
 django
+pypdf
 pgvector
 langchain
+langchain_text_splitters
 huggingface_hub
+langchain-community
+langchain-huggingface
+sentence-transformers
+google-generativeai
+transformers
+torch
+accelerate
+bitsandbytes
+langchain-openai
+pdfplumber

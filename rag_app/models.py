@@ -3,7 +3,7 @@ from pgvector.django import VectorField
 
 class TrafficLawChunk(models.Model):
     content = models.TextField()
-    embedding = VectorField(dimensions=384) # Dùng cho model vietnamese-sbert
+    embedding = VectorField(dimensions=768) # Dùng cho model vietnamese-sbert (768 dimensions)
     metadata = models.JSONField(default=dict, blank=True)
     source = models.CharField(max_length=255, blank=True, null=True)
 
