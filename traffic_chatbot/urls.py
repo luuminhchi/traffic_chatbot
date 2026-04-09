@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import RedirectView
 from rag_app import views as rag_views
 
 # Danh sách các đường dẫn (URL) của dự án
@@ -15,4 +16,6 @@ urlpatterns = [
         path('history/save/', rag_views.save_history, name='save_history'),
         path('history/clear/', rag_views.clear_history, name='clear_history'),
     ])),
+    # Redirect /chat/ về root
+    path('chat/', RedirectView.as_view(url='/', permanent=False)),
 ]

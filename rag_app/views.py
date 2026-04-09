@@ -14,6 +14,7 @@ def chat_home(request):
 @require_http_methods(["POST"])
 def chat_api(request):
     try:
+        import sys
         data = json.loads(request.body)
         user_question = data.get('question', '').strip()
         chat_history = data.get('history', [])
@@ -24,7 +25,6 @@ def chat_api(request):
                 'error': 'Vui lòng nhập câu hỏi'
             }, status=400)
         
-        # Gọi service với history
         result = get_ai_response(user_question, history=chat_history)
         
         return JsonResponse({
@@ -34,24 +34,45 @@ def chat_api(request):
         })
     
     except Exception as e:
+        import sys
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
 
-# 3. API: Lưu chat history vào session
+# 3. API: Lưu chat history vào session (FIFO Queue)
 @csrf_exempt
 @require_http_methods(["POST"])
 def save_history(request):
     try:
         data = json.loads(request.body)
-        history = data.get('history', [])
+        new_conversation = data.get('history', [])
+        conversation_index = data.get('conversation_index', -1)  # -1 = chat mới
         
-        # Lưu vào session (tối đa 50 câu)
-        request.session['chat_history'] = history[-50:]
+        # Lấy danh sách conversations hiện tại
+        conversations = request.session.get('chat_history', [])
+        
+        # Nếu conversations không phải là list, khởi tạo lại
+        if not isinstance(conversations, list):
+            conversations = []
+        
+        # Nếu index hợp lệ → UPDATE conversation đó (không append trùng)
+        if isinstance(conversation_index, int) and 0 <= conversation_index < len(conversations):
+            conversations[conversation_index] = new_conversation
+        else:
+            # Chat mới → Thêm vào cuối
+            conversations.append(new_conversation)
+            
+            # Giữ tối đa 50 conversations (FIFO - xóa cái cũ nhất)
+            if len(conversations) > 50:
+                conversations.pop(0)
+        
+        request.session['chat_history'] = conversations
         request.session.modified = True
         
-        return JsonResponse({'success': True})
+        return JsonResponse({'success': True, 'conversation_index': len(conversations) - 1})
     except Exception as e:
         return JsonResponse({
             'success': False,

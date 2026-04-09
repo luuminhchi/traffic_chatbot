@@ -1,27 +1,26 @@
 import os
 import traceback
 import time
-import google.generativeai as genai
-from django.conf import settings
 from pgvector.django import L2Distance
 from langchain_huggingface import HuggingFaceEmbeddings
+from huggingface_hub import InferenceClient
 from rag_app.models import TrafficLawChunk
 
-# Cấu hình Gemini
-google_api_key = os.getenv('GOOGLE_API_KEY')
-model = 'models/gemini-2.5-flash'
-if google_api_key:
-    genai.configure(api_key=google_api_key)
-    llm = genai.GenerativeModel(model)
-else:
-    raise ValueError("GOOGLE_API_KEY không được set trong environment variables")
+# Cấu hình Hugging Face Inference API
+hf_api_key = os.getenv('HUGGINGFACEHUB_API_KEY')
+repo_id = "Qwen/Qwen2.5-7B-Instruct"
+
+llm_client = InferenceClient(
+    model=repo_id,
+    token=hf_api_key,
+)
 
 # Embedding model
 embedding_model = HuggingFaceEmbeddings(model_name="keepitreal/vietnamese-sbert")
 
-def get_ai_response(input, history=None):
+def get_ai_response(question, history=None):
     """
-    Trích lục câu trả lời từ Gemini API dựa trên RAG
+    Trích lục câu trả lời từ Hugging Face API dựa trên RAG
     
     Args:
         input (str): Câu hỏi từ user
@@ -34,76 +33,88 @@ def get_ai_response(input, history=None):
     
     try:
         # Tạo embedding cho câu hỏi
-        question_embedding = embedding_model.embed_query(input)
+        question_embedding = embedding_model.embed_query(question)
         
-        # Tìm 5 chunks có similarity cao nhất (tăng từ 3 -> 5)
-        relevant_chunks = TrafficLawChunk.objects.annotate(
+        # Tìm 5 chunks có similarity cao nhất
+        relevant_chunks = list(TrafficLawChunk.objects.annotate(
             distance=L2Distance('embedding', question_embedding)
-        ).order_by('distance')[:5]
-        
-        if not relevant_chunks.exists():
+        ).order_by('distance')[:5])
+
+        if not relevant_chunks:
             return {
                 'answer': 'Xin lỗi, tôi không tìm được thông tin liên quan trong cơ sở dữ liệu luật của mình.',
                 'sources': []
             }
-        
+
         context = '\n'.join([chunk.content for chunk in relevant_chunks])
         
-        # Build history context (nếu có)
+        # Build history context
         history_context = ""
         if history and len(history) > 0:
             history_context = "\nNGỮ CẢNH CÁC CÂU HỎI TRƯỚC:\n"
-            for item in history[-3:]:  # Lấy 3 câu gần nhất
-                history_context += f"- User: {item['question']}\n"
-                history_context += f"- AI: {item['answer'][:200]}...\n"
+            for item in history[-3:]:
+                history_context += f"- User: {item.get('question', '')}\n"
+                history_context += f"- AI: {item.get('answer', '')[:200]}...\n"
         
-        # Prompt engineering nâng cao
-        prompt = f"""Bạn là Trợ lý Luật Giao Thông Việt Nam thông minh, chuyên nghiệp và đáng tin cậy.
+        prompt = f"""Bạn là một Chuyên gia Tư vấn Luật Giao thông đường bộ Việt Nam cực kỳ tận tâm và chính xác.
+Dưới đây là thông tin được trích xuất từ cơ sở dữ liệu pháp luật (Nghị định xử phạt, Luật Giao thông):
 
-Nhiệm vụ của bạn:
-1. Trích lục mức phạt/hình phạt CHÍNH XÁC từ văn bản được cung cấp
-2. Nếu có nhiều mức phạt cho cùng hành vi, hãy liệt kê rõ theo loại phương tiện (xe máy, ô tô, v.v.)
-3. Cung cấp những thông tin liên quan khác như mất giấy phép, tạm giữ xe, v.v.
-4. Luôn kết thúc bằng câu: "Lưu ý: Thông tin chỉ mang tính chất tham khảo."
+<TÀI LIỆU_THAM_KHẢO>
+{context}
+<TÀI LIỆU_THAM_KHẢO>
 
-QUY TẮC:
-- Nếu thông tin KHÔNG có trong tài liệu, hãy nói "Tôi không có thông tin..." ĐỪNG bịa
-- Trả lời NGẮN GỌN nhưng ĐẦY ĐỦ (tối đa 500 ký tự)
-- Dùng lời lẽ học thuật nhưng dễ hiểu
+<NHIỆM_VỤ>
+Dựa TRỰC TIẾP và DUY NHẤT vào <TÀI LIỆU_THAM_KHẢO> ở trên, hãy trả lời câu hỏi của người dùng: "{question}"
+</NHIỆM_VỤ>
+
+<QUY_TẮC_TRẢ_LỜI_BẮT_BUỘC>
+1. TÍNH CHI TIẾT: TUYỆT ĐỐI KHÔNG tóm tắt chung chung các hành vi vi phạm. Nếu tài liệu liệt kê các điểm a, b, c, d..., bạn phải liệt kê chi tiết từng hành vi đó ra bằng gạch đầu dòng.
+2. MỨC PHẠT & HÌNH PHẠT BỔ SUNG: Nếu câu hỏi liên quan đến vi phạm hành chính, phải nêu rõ số tiền phạt (in đậm) và các hình phạt bổ sung (như tước bằng lái, tịch thu xe) nếu có trong tài liệu.
+3. TRÍCH DẪN RÕ RÀNG: Không cắt bỏ các trường hợp ngoại lệ. (Ví dụ: phải giữ nguyên các cụm từ "trừ các hành vi vi phạm tại điểm...").
+4. XỬ LÝ KHI THIẾU THÔNG TIN: Nếu <TÀI LIỆU_THAM_KHẢO> hoàn toàn không chứa câu trả lời cho câu hỏi, hãy thành thật đáp: "Dựa trên dữ liệu hiện tại, tôi chưa tìm thấy quy định cụ thể về vấn đề này." Tuyệt đối không tự bịa ra luật hay lấy kiến thức bên ngoài.
+5. VĂN PHONG: Chuyên nghiệp, rõ ràng, dễ hiểu. Sử dụng markdown để format câu trả lời (in đậm số tiền, dùng danh sách bullet point).
+</QUY_TẮC_TRẢ_LỜI_BẮT_BUỘC>
 
 {history_context}
 
-THÔNG TIN LUẬT:
-{context}
 
-CÂU HỎI CỦA USER:
-{input}
-
-CÂU TRẢ LỜI (phải theo đúng quy tắc trên):
-"""
+CÂU TRẢ LỜI:"""
         
-        # Gọi Gemini API với retry logic
         response = None
         for attempt in range(max_retries):
             try:
-                response = llm.generate_content(prompt).text
-                if response and response.strip():
+                print(f"[HF] Gọi Hugging Face API (lần {attempt + 1}/{max_retries})...", flush=True)
+                
+                result = llm_client.chat_completion(
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=512,
+                    temperature=0.1,
+                )
+                response = result.choices[0].message.content
+                
+                if response and len(response.strip()) > 10:
+                    print(f"[HF] ✓ Nhận response thành công", flush=True)
                     break
+                    
             except Exception as retry_err:
+                error_str = str(retry_err)
+                print(f"[HF ERROR] Lỗi lần {attempt + 1}/{max_retries}: {error_str[:100]}", flush=True)
+                
                 if attempt < max_retries - 1:
-                    print(f"[RETRY] Lỗi, thử lại trong 2s... (lần {attempt + 1}/{max_retries})")
-                    time.sleep(2)
+                    wait_time = 5 * (attempt + 1)
+                    print(f"[HF] Chờ {wait_time}s trước khi thử lại...", flush=True)
+                    time.sleep(wait_time)
                 else:
                     raise
         
-        if not response or not response.strip():
+        if not response or len(response) < 10:
             return {
                 'answer': 'Không thể lấy câu trả lời từ AI. Vui lòng thử lại.',
                 'sources': []
             }
         
-        # Trả về sources (tên file, không lặp)
-        sources = list(set([chunk.source for chunk in relevant_chunks]))
+        # Trả về sources
+        sources = list(set([chunk.source for chunk in relevant_chunks if chunk.source]))
             
         return {
             'answer': response.strip(),
@@ -111,8 +122,9 @@ CÂU TRẢ LỜI (phải theo đúng quy tắc trên):
         }
     
     except Exception as e:
-        error_msg = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
-        print(f"[ERROR] {error_msg}")
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"[ERROR] {error_msg}", flush=True)
+        
         return {
             'answer': 'Hệ thống đang bận hoặc gặp sự cố. Vui lòng thử lại sau ít phút.',
             'sources': []
