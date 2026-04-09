@@ -1,6 +1,7 @@
 import pdfplumber
 import re
 import os
+import unicodedata
 from pathlib import Path
 
 class LegalDataCleaner:
@@ -19,41 +20,124 @@ class LegalDataCleaner:
                     full_text.append(text)
         return "\n".join(full_text)
 
-    def clean_text(self, text):
-        # 1. Xóa hàng dấu sao hoặc gạch ngang (********, --------)
+
+    def clean_text(self, text: str) -> str:
+
+        # ==========================================
+        # BƯỚC 1: Normalize Unicode (ưu tiên đầu tiên)
+        # ==========================================
+        text = unicodedata.normalize("NFC", text)
+
+        # ==========================================
+        # BƯỚC 2: Xóa ký tự nhiễu & separator
+        # ==========================================
         text = re.sub(r'[\*\-\_]{3,}', '', text)
+        # Xóa ký tự không in được (giữ lại newline)
+        text = re.sub(r'[^\S\n]+', ' ', text)  # normalize space, giữ \n
 
-        # 2. Xóa Quốc hiệu, Tiêu ngữ và tên cơ quan ban hành (QUỐC HỘI, CHÍNH PHỦ...)
-        # Dùng (?i) để không phân biệt hoa thường nếu cần
-        text = re.sub(r'(QUỐC HỘI|CHÍNH PHỦ)\s+CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', '', text)
-        text = re.sub(r'Độc lập - Tự do - Hạnh phúc', '', text)
+        # ==========================================
+        # BƯỚC 3: Xóa boilerplate pháp lý
+        # ==========================================
 
-        # 3. Xóa Số hiệu văn bản (Ví dụ: Số: 26/2001/QH10)
-        text = re.sub(r'Số:\s+\d+/\d+/[A-Z0-9-]+', '', text)
+        # Quốc hiệu / Tiêu ngữ — có thể xuất hiện theo nhiều thứ tự
+        text = re.sub(
+            r'(QUỐC HỘI|CHÍNH PHỦ|BỘ\s+\S+)\s+'
+            r'CỘNG\s+HÒA\s+XÃ\s+HỘI\s+CHỦ\s+NGHĨA\s+VIỆT\s+NAM',
+            '', text
+        )
+        text = re.sub(r'Độc\s+lập\s*[-–]\s*Tự\s+do\s*[-–]\s*Hạnh\s+phúc', '', text)
+        text = re.sub(r'CỘNG\s+HÒA\s+XÃ\s+HỘI\s+CHỦ\s+NGHĨA\s+VIỆT\s+NAM', '', text)
 
-        # 4. Xóa địa danh, ngày tháng (Hà Nội, ngày... tháng... năm...)
-        text = re.sub(r'[A-ZÀ-Ỹa-zà-ỹ\s\.]{2,},\s+ngày\s+\d+\s+tháng\s+\d+\s+năm\s+\d+', '', text)
+        # Số hiệu văn bản — mở rộng pattern
+        text = re.sub(r'Số\s*:\s*[\d/A-Z-]+', '', text, flags=re.IGNORECASE)
 
-        # 5. Xóa cụm từ lặp lại "LUẬT CỦA QUỐC HỘI NƯỚC..." 
-        # (Giữ lại tên Luật "GIAO THÔNG ĐƯỜNG BỘ" ở dòng sau)
-        text = re.sub(r'LUẬT CỦA QUỐC HỘI NƯỚC CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', '', text)
+        # Địa danh + ngày tháng ký
+        text = re.sub(
+            r'[\w\s\.,]{2,30},\s*ngày\s+\d{1,2}\s+tháng\s+\d{1,2}\s+năm\s+\d{4}',
+            '', text
+        )
 
-        # 6. XÓA PHẦN "CĂN CỨ" (Dành cho RAG: Phần này thường gây nhiễu vì toàn liệt kê các luật khác)
-        # Tìm từ "Để tăng cường..." hoặc "Căn cứ vào..." cho đến khi gặp "Chương" hoặc "Điều"
-        # Dùng flags=re.DOTALL để dấu chấm khớp với cả dòng mới
-        text = re.sub(r'(Để tăng cường|Căn cứ vào).*?(?=(Chương|Điều)\s+\d+)', '', text, flags=re.DOTALL)
+        # Header luật
+        text = re.sub(
+            r'LUẬT\s+(CỦA\s+)?QUỐC\s+HỘI\s+NƯỚC\s+CỘNG\s+HÒA\s+XÃ\s+HỘI\s+CHỦ\s+NGHĨA\s+VIỆT\s+NAM',
+            '', text
+        )
 
-        # --- Các bước nối dòng và định dạng giữ nguyên ---
-        text = re.sub(r'(?<![\.;:])\n', ' ', text)
-        text = re.sub(r'\s+(Chương\s+\d+)', r'\n\1', text) # Thêm Chương vào danh sách xuống dòng
-        text = re.sub(r'\s+(Điều\s+\d+)', r'\n\1', text)
-        text = re.sub(r'\s+(Khoản\s+\d+)', r'\n\1', text)
-        text = re.sub(r'\s+([a-zđ]\))', r'\n\1', text)
+        # Chữ ký, chức danh cuối văn bản
+        text = re.sub(r'Nơi\s+nhận\s*:.*', '', text, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(
+            r'(TM | KT\.\s*)?(THỦ TƯỚNG|PHÓ THỦ TƯỚNG|CHỦ TỊCH QUỐC HỘI|BỘ TRƯỞNG|CHÁNH VĂN PHÒNG).*?(ĐÃ KÝ|đã ký)?',
+            '', text, flags=re.DOTALL
+        )
 
-        # Dọn dẹp khoảng trắng thừa
-        text = re.sub(r'[ \t]+', ' ', text)
-        text = re.sub(r'\n\s*\n+', '\n', text)
-        
+        # ==========================================
+        # BƯỚC 4: Xóa phần "Căn cứ" (an toàn hơn)
+        # ==========================================
+        # Dùng lookahead chặt hơn, tránh ăn vào nội dung chính
+        text = re.sub(
+            r'(Căn\s+cứ\s+(vào\s+)?|Để\s+tăng\s+cường\s+)(.*?)'
+            r'(?=\n\s*(Chương|Điều)\s+[IVXLC\d]+)',
+            '',
+            text,
+            flags=re.DOTALL | re.IGNORECASE
+        )
+
+        # ==========================================
+        # BƯỚC 5: Normalize cấu trúc điều khoản
+        # (TRƯỚC khi nối dòng — thứ tự quan trọng!)
+        # ==========================================
+
+        # Đảm bảo Chương/Điều luôn bắt đầu dòng mới
+        text = re.sub(r'[ \t]*(Chương\s+[IVXLC\d]+)', r'\n\1', text)
+        text = re.sub(r'[ \t]*(Điều\s+\d+[\.\:]?)', r'\n\1', text)
+
+        # Khoản dạng "1." hoặc "Khoản 1" — thêm dòng mới
+        text = re.sub(r'[ \t]*(?<!\d)(\d{1,2}\.\s+[A-ZĐÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĂẮẶẴẮĐ])', r'\n\1', text)
+        text = re.sub(r'[ \t]*(Khoản\s+\d+)', r'\n\1', text)
+
+        # Điểm a), b), c)...
+        text = re.sub(r'[ \t]*([a-zđ]\)\s)', r'\n\1', text)
+
+        # ==========================================
+        # BƯỚC 6: Nối dòng bị wrap (chỉ dòng thường)
+        # ==========================================
+        # Nối dòng NẾU dòng trước không kết thúc bằng .;: 
+        # VÀ dòng sau không bắt đầu bằng cấu trúc pháp lý
+        text = re.sub(
+            r'(?<![\.;:\n])\n(?!\s*(Chương|Điều|Khoản|\d{1,2}\.|[a-zđ]\)))',
+            ' ',
+            text
+        )
+
+        # ==========================================
+        # BƯỚC 7: Fix lỗi OCR phổ biến
+        # ==========================================
+        # Số tiền bị tách (100 000 → 100000)
+        text = re.sub(r'(\d{1,3})\s+(\d{3})(?=\s*(đồng|VNĐ|vnđ))', r'\1\2', text)
+        # Chữ l bị nhận nhầm thành 1
+        text = re.sub(r'\bl(\d{5,})\b', r'1\1', text)
+        # "Điề u" bị tách
+        text = re.sub(r'Điề\s+u\b', 'Điều', text)
+        text = re.sub(r'khoả\s+n\b', 'khoản', text)
+
+        # ==========================================
+        # BƯỚC 8: Dọn dẹp cuối
+        # ==========================================
+        text = re.sub(r'[ \t]+', ' ', text)          # nhiều space → 1
+        text = re.sub(r'\n{3,}', '\n\n', text)        # nhiều newline → 2
+        text = re.sub(r'^\s*$', '', text, flags=re.MULTILINE)  # xóa dòng trống
+        text = re.sub(
+        r'(Điều|Khoản|Chương)\s*\n\s*(\d+)',
+        r'\1 \2',
+        text    
+        )
+        text = re.sub(
+        r'(Điều\s+\d+)\s*\n\s*([A-ZĐÀÁÂÃ])',
+        r'\1. \2',
+        text
+        )
+
+
         return text.strip()
     
     def run_pipeline(self):

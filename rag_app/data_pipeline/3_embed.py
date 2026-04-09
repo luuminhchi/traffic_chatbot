@@ -11,46 +11,66 @@ django.setup()
 
 from rag_app.models import TrafficLawChunk
 
-
 class LegalEmbedder:
-    def __init__(self, model_name="keepitreal/vietnamese-sbert"):
-        print(" Đang tải model")
+    def __init__(self, model_name="keepitreal/vietnamese-sbert", batch_size=64):
         self.model = SentenceTransformer(model_name)
+        self.batch_size = batch_size
 
     def run(self, json_file):
         if not os.path.exists(json_file):
-            print(f" Không tìm thấy file {json_file}")
+            print(f"Không tìm thấy file {json_file}")
             return
 
         with open(json_file, "r", encoding="utf-8") as f:
             chunks = json.load(f)
 
-        print(f"Bắt đầu nạp {len(chunks)} chunks vào Database...")
+        print(f"Bắt đầu nạp {len(chunks)} chunks...")
 
-        # 1. XỬ LÝ TRÙNG LẶP: Xóa dữ liệu cũ dựa trên tên file (source)
-        # Cách này giúp bạn nạp đi nạp lại mà không bị nhân đôi dữ liệu
-        sources = list(set([c['source'] for c in chunks]))
+        # Xóa dữ liệu cũ theo source
+        sources = list(set([c['metadata']['source'] for c in chunks]))
         for src in sources:
-            deleted_count = TrafficLawChunk.objects.filter(source=src).delete()
-            print(f"Đã xóa {deleted_count[0]} bản ghi cũ của file: {src}")
+            deleted = TrafficLawChunk.objects.filter(source=src).delete()
+            print(f"Đã xóa {deleted[0]} bản ghi cũ: {src}")
 
-        # 2. EMBEDDING & SAVE
-        for  item in chunks:
-            content = item['content']
-            source = item['source']
+        # Batch embedding — nhanh hơn ~10x so với từng cái
+        total = len(chunks)
+        for i in range(0, total, self.batch_size):
+            batch = chunks[i : i + self.batch_size]
+            
+            # Encode cả batch 1 lần
+            contents = [item['content'] for item in batch]
+            vectors = self.model.encode(
+                contents,
+                batch_size=self.batch_size,
+                show_progress_bar=False
+            ).tolist()
 
-            # Biến văn bản thành dãy số (Vector)
-            vector = self.model.encode(content).tolist()
+            # Tạo objects với đầy đủ metadata
+            objects = []
+            for item, vector in zip(batch, vectors):
+                meta = item['metadata']
+                objects.append(TrafficLawChunk(
+                    content        = item['content'],
+                    embedding      = vector,
+                    source         = meta.get('source', ''),
+                    dieu_num       = meta.get('dieu_num'),
+                    dieu_title     = meta.get('dieu_title', ''),
+                    khoan_num      = meta.get('khoan_num'),
+                    chunk_type     = meta.get('chunk_type', 'article'),
+                    vehicle_types  = meta.get('vehicle_types', []),
+                    violation_tags = meta.get('violation_tags', []),
+                    penalty_min    = meta.get('penalty_min'),
+                    penalty_max    = meta.get('penalty_max'),
+                    has_revocation = meta.get('has_revocation', False),
+                ))
 
-            # Lưu vào Postgres qua Django Model
-            TrafficLawChunk.objects.create(
-                content=content,
-                source=source,
-                embedding=vector
-            )
+            # 1 INSERT duy nhất cho cả batch
+            TrafficLawChunk.objects.bulk_create(objects)
+            print(f"  [{i + len(batch)}/{total}] đã embed xong")
 
-           
+        print(f"\nHoàn tất! {total} chunks trong DB.")
+
 
 if __name__ == "__main__":
-    embedder = LegalEmbedder()
+    embedder = LegalEmbedder(batch_size=64)
     embedder.run("D:\\trafficChatbot\\rag_app\\data_pipeline\\final_chunks.json")
