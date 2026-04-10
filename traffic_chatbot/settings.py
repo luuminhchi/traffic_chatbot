@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import environ
+import dj_database_url
 
 # 1. Định vị thư mục gốc
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,14 +61,11 @@ WSGI_APPLICATION = 'traffic_chatbot.wsgi.application'
 
 # 7. Cấu hình Cơ sở dữ liệu PostgreSQL
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': env('DB_NAME'),
-        'USER': env('DB_USER'),
-        'PASSWORD': env('DB_PASSWORD'),
-        'HOST': env('DB_HOST'),
-        'PORT': env('DB_PORT'),
-    }
+    'default': dj_database_url.parse(
+        env('DB_URL'),
+        conn_max_age=600,
+        engine='django.db.backends.postgresql',
+    )
 }
 
 # 8. Xác thực mật khẩu

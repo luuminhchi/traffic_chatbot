@@ -1,4 +1,5 @@
 django-environ
+dj-database-url
 django
 pypdf
 pgvector
