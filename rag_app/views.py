@@ -4,6 +4,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 import json
 from rag_app.services import get_ai_response
+import markdown
 
 # 1. Trang chủ: Hiển thị giao diện chat
 def chat_home(request):

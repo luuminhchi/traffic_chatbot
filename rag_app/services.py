@@ -55,9 +55,9 @@ def get_ai_response(question, history=None):
             max_tokens=512,
             temperature=0.1,
         )
-
+        answer = result.choices[0].message.content.strip()
         return {
-            'answer': result.choices[0].message.content.strip(),
+            'answer': answer,
             'sources': list(set([c.source for c in relevant_chunks]))
         }
 

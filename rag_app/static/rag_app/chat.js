@@ -86,8 +86,8 @@ function showWelcome() {
       <div class="examples">
         <button class="example-btn" onclick="sendQuestion('Lỗi không đội mũ bảo hiểm xe máy bị phạt bao nhiêu?')">🚲 Mũ bảo hiểm</button>
         <button class="example-btn" onclick="sendQuestion('Tốc độ tối đa cho xe máy?')">🏁 Tốc độ</button>
-        <button class="example-btn" onclick="sendQuestion('Phạt bao nhiêu nếu vượt đèn đỏ?')">🚦 Đèn đỏ</button>
-        <button class="example-btn" onclick="sendQuestion('Tài liệu phải mang theo khi lái xe?')">📋 Tài liệu</button>
+        <button class="example-btn" onclick="sendQuestion('Phạt bao nhiêu tiền nếu vượt đèn đỏ?')">🚦 Đèn đỏ</button>
+        <button class="example-btn" onclick="sendQuestion('Uống rượu bia khi tham gia giao thông phạt bao nhiêu?')">🍷 Rượu bia</button>
       </div>
     </div>
   </div>`;
@@ -203,7 +203,11 @@ function addMessageToUI(text, sender, sources = null) {
 
   const content = document.createElement("div");
   content.className = "message-content";
-  content.textContent = text;
+  if (sender === "bot") {
+    content.innerHTML = renderMarkdown(text);
+  } else {
+    content.textContent = text;
+  }
 
   msgDiv.appendChild(avatar);
   msgDiv.appendChild(content);
@@ -257,6 +261,88 @@ function sendQuestion(q) {
 function startNewChat() {
   showWelcome();
   updateSidebar();
+}
+
+function renderMarkdown(text) {
+  function esc(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  function inline(s) {
+    return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  }
+
+  const lines = text.split("\n");
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Table
+    if (line.trim().startsWith("|")) {
+      const rows = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        rows.push(lines[i]);
+        i++;
+      }
+      let thtml = '<table class="md-table">';
+      let isHeader = true;
+      for (const row of rows) {
+        const cells = row.split("|").slice(1, -1);
+        if (cells.every((c) => /^[\s:|-]+$/.test(c))) { isHeader = false; continue; }
+        const tag = isHeader ? "th" : "td";
+        thtml += "<tr>" + cells.map((c) => `<${tag}>${inline(c.trim())}</${tag}>`).join("") + "</tr>";
+        isHeader = false;
+      }
+      thtml += "</table>";
+      out.push(thtml);
+      continue;
+    }
+
+    // Heading ## or #
+    if (line.startsWith("## ") || line.startsWith("# ")) {
+      const content = line.startsWith("## ") ? line.slice(3) : line.slice(2);
+      out.push(`<div class="md-heading">${inline(content)}</div>`);
+      i++; continue;
+    }
+
+    // Bullet list
+    if (/^[-*] /.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[-*] /.test(lines[i])) {
+        items.push(`<li>${inline(lines[i].replace(/^[-*] /, ""))}</li>`);
+        i++;
+      }
+      out.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    // Numbered list
+    if (/^\d+\. /.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\d+\. /.test(lines[i])) {
+        items.push(`<li>${inline(lines[i].replace(/^\d+\. /, ""))}</li>`);
+        i++;
+      }
+      out.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+
+    // Empty line → spacer
+    if (line.trim() === "") {
+      out.push('<div class="md-spacer"></div>');
+      i++; continue;
+    }
+
+    // Normal text
+    out.push(`<p>${inline(line)}</p>`);
+    i++;
+  }
+
+  return out.join("");
 }
 
 window.addEventListener("DOMContentLoaded", loadChatHistory);

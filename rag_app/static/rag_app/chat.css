@@ -197,14 +197,67 @@ body {
     color: var(--primary); 
 }
 
-.message-content { 
-    max-width: 100%; 
-    padding: 12px 16px; 
-    border-radius: 12px; 
-    line-height: 1.6; 
-    font-size: 15px; 
-    word-wrap: break-word; 
-    white-space: pre-wrap;
+.message-content {
+    max-width: 100%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.6;
+    font-size: 15px;
+    word-wrap: break-word;
+}
+
+.message-content p {
+    margin: 2px 0;
+}
+
+.md-heading {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
+    margin: 10px 0 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.bot .md-heading:first-child {
+    margin-top: 2px;
+}
+
+.message-content ul,
+.message-content ol {
+    margin: 4px 0 4px 18px;
+    padding: 0;
+}
+
+.message-content li {
+    margin: 2px 0;
+}
+
+.md-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0;
+    font-size: 13px;
+}
+
+.md-table th,
+.md-table td {
+    border: 1px solid #d1d5db;
+    padding: 6px 10px;
+    text-align: left;
+}
+
+.md-table th {
+    background: #f3f4f6;
+    font-weight: 600;
+}
+
+.md-table tr:nth-child(even) td {
+    background: #f9fafb;
+}
+
+.md-spacer {
+    height: 6px;
 }
 
 .bot .message-content { 
@@ -418,5 +471,108 @@ body {
     }
     .message {
         padding: 0 16px;
+    }
+}
+
+@media print {
+    body {
+        overflow: visible;
+        background: white;
+        color: black;
+        font-size: 13px;
+    }
+
+    .sidebar,
+    .chat-header,
+    .input-area,
+    .send-btn,
+    .new-chat-btn,
+    .sources-box,
+    .loading-spinner {
+        display: none !important;
+    }
+
+    .container {
+        display: block;
+        height: auto;
+        width: 100%;
+    }
+
+    .chat-area {
+        display: block;
+    }
+
+    .chat-messages {
+        overflow: visible;
+        height: auto;
+        padding: 8px 0;
+    }
+
+    .message {
+        padding: 4px 8px;
+        margin: 4px 0;
+        break-inside: avoid;
+    }
+
+    .message.user {
+        padding-left: 8px;
+        padding-right: 8px;
+        justify-content: flex-end;
+    }
+
+    .message.bot {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .message-content {
+        background: transparent !important;
+        border: none !important;
+        color: black !important;
+        padding: 4px 8px;
+    }
+
+    .user .message-content {
+        background: #e6f4ef !important;
+        color: black !important;
+        border: 1px solid #ccc !important;
+    }
+
+    /* Đảm bảo chữ đậm luôn hiển thị đậm khi in */
+    strong,
+    b,
+    .message-content strong,
+    .message-content b {
+        font-weight: 700 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .md-heading {
+        font-weight: 700 !important;
+        border-bottom: 1px solid #ccc;
+        margin: 6px 0 3px;
+    }
+
+    .md-table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    .md-table th,
+    .md-table td {
+        border: 1px solid #999;
+        padding: 4px 8px;
+    }
+
+    .md-table th {
+        background: #e8e8e8 !important;
+        font-weight: 700 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .message-avatar {
+        display: none;
     }
 }
