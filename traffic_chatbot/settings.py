@@ -61,11 +61,14 @@ WSGI_APPLICATION = 'traffic_chatbot.wsgi.application'
 
 # 7. Cấu hình Cơ sở dữ liệu PostgreSQL
 DATABASES = {
-    'default': dj_database_url.parse(
-        env('DB_URL'),
-        conn_max_age=600,
-        engine='django.db.backends.postgresql',
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env('DB_NAME'),
+        'USER': env('DB_USER'),
+        'PASSWORD': env('DB_PASSWORD'),
+        'HOST': env('DB_HOST'),
+        'PORT': env('DB_PORT', default='5432', cast=int),
+    }
 }
 
 # 8. Xác thực mật khẩu

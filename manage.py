@@ -5,7 +5,6 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    # Trỏ tới thư mục chứa file settings.py của dự án
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'traffic_chatbot.settings')
     try:
         from django.core.management import execute_from_command_line
