@@ -117,8 +117,10 @@ class LegalDataCleaner:
         # Chữ l bị nhận nhầm thành 1
         text = re.sub(r'\bl(\d{5,})\b', r'1\1', text)
         # "Điề u" bị tách
-        text = re.sub(r'Điề\s+u\b', 'Điều', text)
-        text = re.sub(r'khoả\s+n\b', 'khoản', text)
+        text = re.sub(r'[,;]?\s*trừ các hành vi vi phạm quy định tại.*?(?=[.;\n]|$)', '', text, flags=re.IGNORECASE)
+    
+        # Xóa các cụm 'theo quy định tại Điều... khoản...' mang tính dẫn chiếu rác
+        text = re.sub(r'quy định tại (điểm|khoản|Điều) \d+.*?(?=[,.;\n]|$)', '', text, flags=re.IGNORECASE)
 
         # ==========================================
         # BƯỚC 8: Dọn dẹp cuối
