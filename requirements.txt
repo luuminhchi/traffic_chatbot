@@ -17,3 +17,5 @@ bitsandbytes
 langchain-openai
 pdfplumber
 markdown
+Docling
+PyMuPDF4LLM

@@ -11,6 +11,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'traffic_chatbot.settings')
 django.setup()
 
 from rag_app.models import TrafficLawChunk
+from django.contrib.postgres.search import SearchVector
 
 class LegalEmbedder:
     def __init__(self, model_name="keepitreal/vietnamese-sbert", batch_size=64):
@@ -70,7 +71,13 @@ class LegalEmbedder:
                 ))
 
             # Thực hiện INSERT hàng loạt vào Supabase
-            TrafficLawChunk.objects.bulk_create(objects)
+            created = TrafficLawChunk.objects.bulk_create(objects)
+
+            # Cập nhật search_vector (BM25 full-text index) cho batch vừa insert
+            ids = [obj.id for obj in created]
+            TrafficLawChunk.objects.filter(id__in=ids).update(
+                search_vector=SearchVector('content', config='simple')
+            )
             print(f"Tiến độ: [{i + len(batch)}/{total}] hạt dữ liệu đã 'lên mây'")
 
         print(f"\n Đã nạp thành công {total} chunks vào Database Vector.")

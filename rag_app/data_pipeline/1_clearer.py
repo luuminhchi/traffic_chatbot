@@ -23,9 +23,6 @@ class LegalDataCleaner:
 
     def clean_text(self, text: str) -> str:
 
-        # ==========================================
-        # BƯỚC 1: Normalize Unicode (ưu tiên đầu tiên)
-        # ==========================================
         text = unicodedata.normalize("NFC", text)
 
         # ==========================================

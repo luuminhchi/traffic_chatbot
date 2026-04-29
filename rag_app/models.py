@@ -1,10 +1,13 @@
 # rag_app/models.py
 from django.db import models
 from pgvector.django import VectorField
+from django.contrib.postgres.search import SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
 
 class TrafficLawChunk(models.Model):
     content = models.TextField()  # Lưu raw_content (bản gốc)
     embedding = VectorField(dimensions=768) # 768 chiều cho vietnamese-sbert
+    search_vector = SearchVectorField(null=True, blank=True)  # BM25 full-text index
     source = models.CharField(max_length=255)
     dieu_num = models.IntegerField(null=True)
     khoan_num = models.IntegerField(null=True)
@@ -19,3 +22,6 @@ class TrafficLawChunk(models.Model):
 
     class Meta:
         db_table = 'traffic_law_chunks'
+        indexes = [
+            GinIndex(fields=['search_vector'], name='search_vector_gin_idx'),
+        ]
